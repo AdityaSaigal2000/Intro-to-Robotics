@@ -1,0 +1,154 @@
+#!/usr/bin/env python
+import rospy
+import math
+import time
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+
+def dist(d,speed_x,cmd_pub):
+        
+	d=d+d*0.01
+        
+	twist=Twist()
+
+	twist.linear.x=speed_x
+	distance=0
+        rate=rospy.Rate(10)
+
+	begin=rospy.get_rostime().to_sec()
+   	t=rospy.get_rostime().to_sec()
+
+	while (distance<d):
+		
+		rospy.loginfo(twist.linear.x)
+		cmd_pub.publish(twist)
+		print(t-begin)
+                t=rospy.get_rostime().to_sec()
+		#distance=twist.linear.x*(t-begin)
+                distance=speed_x*(t-begin)
+		rate.sleep()
+	twist.linear.x=0
+        cmd_pub.publish(twist)
+
+
+def ang(a,speed_a,cmd_pub):
+   
+   
+   twist=Twist()
+   
+   twist.angular.z=speed_a
+   distance=0
+   rate=rospy.Rate(10)
+
+   angle=0
+   variance=-a*0.01
+   
+   begin=rospy.get_rostime().to_sec()
+   t=rospy.get_rostime().to_sec()
+   while (angle<(a-variance)):
+	
+   	rospy.loginfo(twist.linear.z)
+   	
+	twist.angular.z=speed_a
+	t=rospy.get_rostime().to_sec()
+        angle=speed_a*(t-begin)
+   	cmd_pub.publish(twist)
+   	print("a")
+	
+	rate.sleep()
+   twist.angular.z=0
+   cmd_pub.publish(twist)
+
+def curv(d,a,speed_x,speed_a,cmd_pub):
+   
+   
+   twist=Twist()
+   twist.linear.x=speed_x
+   twist.angular.z=speed_a
+   distance=0
+   rate=rospy.Rate(10)
+
+   angle=0
+   variance=-a*0.01
+   
+   begin=rospy.get_rostime().to_sec()
+   t=rospy.get_rostime().to_sec()
+   while (angle<(a-variance)):
+	
+   	rospy.loginfo(twist.linear.z)
+   	
+	twist.angular.z=speed_a
+	t=rospy.get_rostime().to_sec()
+        angle=speed_a*(t-begin)
+   	cmd_pub.publish(twist)
+   	print("a")
+	
+	rate.sleep()
+   twist.linear.x=0
+   twist.angular.z=0
+   cmd_pub.publish(twist)
+
+def sin(d,a,speed_x,speed_a,cmd_pub):
+   twist=Twist()
+   twist.linear.x=speed_x
+   twist.angular.z=speed_a
+   distance=0
+   rate=rospy.Rate(10)
+
+   angle=0
+   variance=-a*0.01
+   
+   begin=rospy.get_rostime().to_sec()
+   t=rospy.get_rostime().to_sec()
+   while (angle<(a-variance)):
+	
+   	rospy.loginfo( twist.linear.z)
+   	
+	twist.angular.z=speed_a
+	t=rospy.get_rostime().to_sec()
+        angle=speed_a*(t-begin)
+   	cmd_pub.publish(twist)
+   	print("a")
+	
+	rate.sleep()
+   twist.linear.x=0
+   twist.angular.z=0
+   cmd_pub.publish(twist)
+
+
+
+def publisher_node():
+   rospy.init_node('lab2') 
+   rospy.sleep(1)
+   cmd_pub=rospy.Publisher('cmd_vel',Twist,queue_size=1)
+   	# part 1 
+   #dist(2,0.2,cmd_pub)
+   #ang(3.14149265358979323/2,1,cmd_pub)
+   #dist(0.5,0.2,cmd_pub)
+   #ang(3.14149265358979323/4,1,cmd_pub)
+   
+	# part 2
+   #dist(1,0.2,cmd_pub)
+   #ang(3.14149265358979323/2,0.4,cmd_pub)
+   #dist(1,0.2,cmd_pub)
+   #ang(3.14149265358979323/2,0.4,cmd_pub)
+   #dist(1,0.2,cmd_pub)
+   #ang(3.14149265358979323/2,0.4,cmd_pub)
+   #dist(1,0.2,cmd_pub)
+   #ang(3.14149265358979323/2,0.4,cmd_pub)
+   
+	# part 3
+   #dist(1.85355,0.2,cmd_pub)
+   #curv(0.5,2.356,0.0585786,0.2,cmd_pub)
+	
+   pass
+
+def main():
+  
+    try:
+	publisher_node()
+    except rospy.ROSInterruptException:
+        pass
+    
+if __name__ == '__main__':
+    main()
