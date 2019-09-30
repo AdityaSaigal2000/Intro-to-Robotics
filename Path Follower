@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+import rospy
+import math
+import time
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+
+class PathFinder:
+	def __init__(self):
+		self.dp=320
+		self.cp=320
+		self.t=begin=rospy.get_rostime().to_sec()
+		rospy.sleep(1)
+		self.cmd_pub=rospy.Publisher('cmd_vel',Twist,queue_size=1)
+		self.col_sub=rospy.Subscriber('color_mono',String,self.callback,queue_size=1)
+
+	def callback(self,Data):
+		#print(Data.data)
+		self.cp=float(Data.data)		
+		
+	def BangBang(self,speed_x,speed_a):
+		rate=rospy.Rate(10)		
+		
+		a_dir=0
+		print(self.cp)
+   		twist=Twist()
+   		twist.linear.x=speed_x
+		twist.angular.z=0
+		self.cmd_pub.publish(twist)
+		ts=rospy.get_rostime().to_sec()
+  		while ((ts-self.t)<40):
+			print(self.cp)
+			ts=rospy.get_rostime().to_sec()
+			if (self.cp<self.dp):
+				a_dir=1	
+   			if (self.cp>self.dp):
+				 a_dir=-1
+	   		twist.angular.z=a_dir*speed_a
+   			#rospy.loginfo(twist.linear.z)
+   			self.cmd_pub.publish(twist)
+        	
+			rate.sleep()
+   		twist.linear.x=0
+   		twist.angular.z=0
+  		self.cmd_pub.publish(twist)
+
+	def P(self,speed_x,speed_a,k_p):
+		rate=rospy.Rate(10)		
+		
+		print(self.cp)
+   		twist=Twist()
+   		twist.linear.x=speed_x
+		twist.angular.z=0
+		self.cmd_pub.publish(twist)
+		ts=rospy.get_rostime().to_sec()
+  		while ((ts-self.t)<50):
+			print(self.cp)
+			ts=rospy.get_rostime().to_sec()
+			error=self.dp-self.cp
+	   		twist.angular.z=k_p*error
+   			#rospy.loginfo(twist.linear.z)
+   			self.cmd_pub.publish(twist)
+        		print("error adj= ", error*k_p)
+			rospy.loginfo(twist.linear.z)
+			rate.sleep()
+   		twist.linear.x=0
+   		twist.angular.z=0
+  		self.cmd_pub.publish(twist)
+	def PI(self,speed_x,speed_a,k_p,k_i):
+		rate=rospy.Rate(10)		
+		
+		print(self.cp)
+   		twist=Twist()
+   		twist.linear.x=speed_x
+		twist.angular.z=0
+		self.cmd_pub.publish(twist)
+		ts=rospy.get_rostime().to_sec()
+		integral=0
+		
+  		while ((ts-self.t)<50):
+			print(self.cp)
+			ts=rospy.get_rostime().to_sec()
+			error=self.dp-self.cp
+	
+			integral=error + integral
+
+			if (k_i*integral>0.2*0.1):
+				ssDwy=	0.2*0.1
+			else:
+				ssDwy=k_i*integral	
+			
+			if (ssDwy<-0.2*0.1):
+				ssDwy= -0.2*0.1
+		
+			w=k_p*error +ssDwy
+			print(w)
+			print(k_i*integral)
+	   		twist.angular.z=w
+   			#rospy.loginfo(twist.linear.z)
+   			self.cmd_pub.publish(twist)
+			#if (w<>0):
+        			#print("error adj= ", 100*(k_i*integral/w),"%")
+			rospy.loginfo(twist.linear.z)
+			rate.sleep()
+   		twist.linear.x=0
+   		twist.angular.z=0
+  		self.cmd_pub.publish(twist)
+def main():
+  
+    try:
+	rospy.init_node('lab3')
+	rospy.sleep(1) 
+	LineFollower=PathFinder()
+	#LineFollower.BangBang(0.03,0.2)
+	#LineFollower.P(0.05,0.2,0.003)	
+
+	LineFollower.PI(0.085,0.2,0.0025,0.0000002)  #pretty good  (0.2*0.1)	
+   	
+    except rospy.ROSInterruptException:
+        pass
+    
+if __name__ == '__main__':
+    main()
