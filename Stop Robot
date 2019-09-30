@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+import rospy
+import math
+import time
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+
+class PathFinder:
+	def __init__(self):
+		self.dp=320
+		self.cp=320
+		self.t=begin=rospy.get_rostime().to_sec()
+		rospy.sleep(1)
+		self.cmd_pub=rospy.Publisher('cmd_vel',Twist,queue_size=1)
+		self.col_sub=rospy.Subscriber('color_mono',String,self.callback,queue_size=1)
+
+	def callback(self,Data):
+		#print(Data.data)
+		self.cp=float(Data.data)		
+		
+	def BangBang(self,speed_x,speed_a):
+		rate=rospy.Rate(10)		
+		
+		a_dir=0
+		print(self.cp)
+		for i in range(200):
+   			twist=Twist()
+   			twist.linear.x=0
+			twist.angular.z=0
+			self.cmd_pub.publish(twist)
+			rate.sleep()		
+		ts=rospy.get_rostime().to_sec()
+
+
+def main():
+  
+    try:
+	rospy.init_node('lab3')
+	rospy.sleep(1) 
+	LineFollower=PathFinder()
+	LineFollower.BangBang(0.05,0.1)
+		
+	
+   	
+    except rospy.ROSInterruptException:
+        pass
+    
+if __name__ == '__main__':
+    main()
