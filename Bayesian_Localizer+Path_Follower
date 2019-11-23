@@ -1,0 +1,399 @@
+#!/usr/bin/env python
+
+import rospy
+import math
+import time
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+import numpy as np
+import matplotlib.pyplot as plt
+import re
+import sys, select, os
+if os.name == 'nt':
+    import msvcrt
+else:
+    import tty, termios
+
+def getKey():
+    if os.name == 'nt':
+      return msvcrt.getch()
+
+    tty.setraw(sys.stdin.fileno())
+    rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+    if rlist:
+        key = sys.stdin.read(1)
+    else:
+        key = ''
+
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+    return key
+
+
+class PathFinder:
+	def __init__(self,Bayes):
+		self.dp=270
+		self.cp=0
+		self.t=begin=rospy.get_rostime().to_sec()
+		rospy.sleep(1)
+		self.cmd_pub=rospy.Publisher('cmd_vel',Twist,queue_size=1)
+		self.line_idx = rospy.Subscriber('line_idx', String, self.s_callback)
+		
+		self.x_loc=0
+		self.spedx=0.1
+		
+		self.goal=[0.61,1.22,2.44,3.05]
+		self.g_i=0
+		self.BL=Bayes
+		self.running=False	
+		
+	def s_callback(self,Data):
+
+		self.cp=float(Data.data)
+		#print(self.cp)
+				
+	def P(self,speed_x,speed_a,k_p):
+		rate=rospy.Rate(10)		
+		print("----------------------start PID")
+		self.running=True
+   		twist=Twist()
+   		twist.linear.x=speed_x
+		twist.angular.z=0
+		self.cmd_pub.publish(twist)
+		ts=rospy.get_rostime().to_sec()
+
+	
+		Go_PID=True
+		Go_PID=self.BL.Color_See()
+		print("PID --- START")
+  		while (Go_PID):	
+			#print("PID ---")	
+			ts=rospy.get_rostime().to_sec()
+			error=self.dp-self.cp
+	   		twist.angular.z=k_p*error
+			#print("~~~",error)
+   			self.cmd_pub.publish(twist)
+			rate.sleep()
+			Go_PID=self.BL.Color_See()
+		print("PID ---  END")
+		#while not(Go_PID):
+		#	rate.sleep()				
+			
+			#rate.sleep()
+			#self.P_go==True
+   		if not (Go_PID):
+			print("~~AUTO")
+			#twist.linear.x=0
+   			twist.angular.z=0
+  			self.cmd_pub.publish(twist)
+			
+			Go_PID=self.BL.Stop_Seen()
+			#print("3")
+		
+		
+
+class BayesLoc:
+
+    def __init__(self, color_map,stopss):
+        self.colour_sub = rospy.Subscriber('mean_img_rgb', String, self.measurement_callback)
+        self.line_idx_sub = rospy.Subscriber('line_idx', String, self.line_callback)
+        self.cmd_pub= rospy.Publisher('cmd_vel', Twist, queue_size=1)
+
+        self.color_map = color_map
+        self.measured_rgb = np.array([0,0,0]) # updated with the measurement_callback
+        self.line_idx = 0 # updated with the line_callback with the index of the detected black line.
+	self.col_index=-1
+	self.P_go=True	
+
+	
+	self.state_prob=[[1, 0.08333333333 ],[2,0.08333333333 ],[3,0.08333333333 ],[4,0.08333333333 ],[5,0.08333333333 ],[6,0.08333333333 ],[7,0.08333333333 ],[8,0.08333333333 ],[9,0.08333333333 ],[10,0.08333333333 ],[11,0.08333333333 ],[12,0.08333333333 ]]
+
+	self.probMAX=[-1000,-1000] 
+	
+	self.stops=stopss
+
+    def measurement_callback(self, msg):
+        rgb = msg.data.replace('r:','').replace('b:','').replace('g:','').replace(' ','')
+        r,g,b = rgb.split(',')
+        r,g,b=(float(r), float(g),float(b))
+        self.measured_rgb = np.array([r,g,b])
+        
+
+	#col_map=[ [197.771007812,224.592570313,0.0],[143.553148437,145.286742188,143.42146093],[248.0588125,212.917414063, 0.0],[5.1850703125,98.0316484375,196.333867188]]
+	col_map=[ [1.75510539e+02 ,2.00532758e+02,   1.38242188e-01],[222.31377344,46.41646094,    0.27416406],[2.20497477e+02 ,1.86066602e+02,   3.50156250e-02],[7.19654688,   76.43063281,  174.95347656]]
+	
+	#color picking
+	for i in range(4):
+		err_col=[1000,1000,1000]
+		err_err=[1*25,1*25,1*25]
+		
+		for j in range(3):
+			err_col[j]=-err_err[j]+abs(self.measured_rgb[j]-col_map[i][j])
+		
+	
+		if err_col[0]<0 and err_col[1]<0 and err_col[2]<0:
+			self.col_index=i
+			#print(self.col_index)
+			
+			break
+	
+		
+    def line_callback(self, data):
+        index = int(data.data)
+        self.line_idx = index
+
+	
+    def Color_See(self):
+	if self.col_index>=0:
+		return False
+		print("pause")
+	#if Desired reached
+	return True
+    
+    def bayes_(self):
+	x=np.array(range(2,14))
+	y=np.zeros(12)
+	print("----------------bayes")
+	col='n'
+	if self.col_index==0:
+		col='g'
+	elif self.col_index==1:
+		col='o'
+	elif self.col_index==2:
+		col='y'
+	elif self.col_index==3:
+		col='b'
+	
+	x=np.array(range(1,13))
+	y=np.zeros(12)
+	measurement_model={'b':{'b':0.6,'g':0.2,'y':0.05,'o':0.05,'n':0.1},
+                   'g':{'b':0.20,'g':0.60,'y':0.05,'o':0.05,'n':0.1},
+                   'y':{'b':0.05,'g':0.05,'y':0.65,'o':0.15,'n':0.1},
+                   'o':{'b':0.05,'g':0.05,'y':0.2,'o':0.60,'n':0.1}}
+
+	colors=[(1,'g'),(2,'o'),(3,'g'),(4,'y'),(5,'b'),(6,'g'),(7,'o'),(8,'y'),(9,'b'),(10,'b'),(11,'o'),(12,'y')]
+	state_model=[[1,[1,0.85],[0,0.1],[-1,0.05]],
+             [0,[0,0.9],[-1,0.05],[1,0.05]],
+             [-1,[-1,0.85],[0,0.10],[1,0.05]]]
+	prediction=self.state_prob
+
+
+	prediction=[[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0],[10,0],[11,0],[12,0],[13,0]]
+	accum=0
+	for j in range (0,12):
+		prediction[j][1]=0
+		control=1
+		for k in range (0,12):
+		    if(abs(prediction[k][0]-prediction[j][0])>abs(control)):
+		        prediction[j][1]=prediction[j][1]
+		    elif(control==prediction[j][0]-prediction[k][0]):
+		        prediction[j][1]=(prediction[j][1]+state_model[-1*control+1][1][1]*self.state_prob[k][1])
+		    elif(control==prediction[k][0]-prediction[j][0]):
+		        prediction[j][1]=(prediction[j][1]+state_model[-1*control+1][3][1]*self.state_prob[k][1])
+		    elif(control==0):
+		        prediction[j][1]=prediction[j][1]+0.1*self.state_prob[k][1]
+		    if(k==0 and j==11):
+		        if(control==-1): 
+		            prediction[j][1]=(prediction[j][1]+state_model[-1*control+1][1][1]*self.state_prob[k][1])
+		        if(control==1):
+		            prediction[j][1]=(prediction[j][1]+state_model[-1*control+1][3][1]*self.state_prob[k][1])
+		        if(control==0):
+		             prediction[j][1]=prediction[j][1]+0.1*self.state_prob[k][1]
+		    elif(k==11 and j==0):
+		        #print("hello")
+		        if(control==1): 
+		            prediction[j][1]=(prediction[j][1]+state_model[-1*control+1][1][1]*self.state_prob[k][1])
+		        if(control==-1):
+		            prediction[j][1]=(prediction[j][1]+state_model[-1*control+1][3][1]*self.state_prob[k][1])
+		        if(control==0):
+		             prediction[j][1]=prediction[j][1]+0.1*self.state_prob[k][1]
+	for j in range (0,12):
+		color=colors[j][1]
+		accum=accum+measurement_model[color][col]*prediction[j][1]
+	
+	for j in range (0,12):
+		color=colors[j][1]
+		self.state_prob[j][1]=measurement_model[color][col]*prediction[j][1]/accum
+
+	
+	for j in range (0,11):
+		y[j]=self.state_prob[j][1]
+	    
+	bars = range(2,12)
+
+	title="State Estimate"
+	fig, axs =plt.subplots()
+	axs.bar(x,y,color=['yellow', 'green', 'blue', 'orange', 'orange', 'green', 'blue', 'orange','yellow','green','blue'], edgecolor='black',linestyle ="--",hatch="*")
+	plt.xticks(x, bars)
+	axs.set_title(title)
+	axs.set_xlabel("Colour Index")
+	axs.set_ylabel("Probability")     
+	print(self.state_prob)
+	mmax=-1000
+	max_ind=-100	
+	for i in range(12):
+		if (self.state_prob[i][1]>mmax):
+			mmax=self.state_prob[i][1]
+			max_ind=self.state_prob[i][0]
+	print(">>>>>>>>>>",mmax, max_ind)
+	self.probMAX=[max_ind,mmax]
+
+
+
+	print("----------------bayes end")
+	 
+	fig_size = plt.rcParams["figure.figsize"]
+	fig_size[0] = 6
+	fig_size[1] = 4
+	plt.rcParams["figure.figsize"] = fig_size 
+	plt.savefig('books_read.png')
+
+    def Stop_Seen(self):
+	t_init=rospy.get_rostime().to_sec()
+	ts=rospy.get_rostime().to_sec()
+	twist2=Twist()
+   	twist2.linear.x=0
+	twist2.angular.z=0
+	cmd_pub2=rospy.Publisher('cmd_vel',Twist,queue_size=1)
+	rate=rospy.Rate(10)
+
+	self.P_go=False	
+	self.bayes_()
+	print("color det: ",self.col_index)
+
+	print("-----------------------------AUTO Start")
+	#while ((ts-t_init)<2):
+	#	print("pause")
+	#	ts=rospy.get_rostime().to_sec()
+
+	
+
+	desired=False
+	if (self.probMAX[1]>=0.8):
+		for i in range(len(self.stops)):
+			if self.stops[i]==self.probMAX[0]:
+				desired=True
+				self.stops=self.stops[0:i] + self.stops[i+1:len(self.stops)]
+				break
+		if desired==True:
+			   
+   			   print("--------------   DESIRED REACH	", i)
+		           speed_a=0.4
+			   twist2.angular.z=speed_a
+		
+			   
+			   a=3.1416/2
+			   angle=0
+			   variance=a*0.01
+			   
+			   begin=rospy.get_rostime().to_sec()
+			   tt=rospy.get_rostime().to_sec()
+		           print("turn 1")
+			   while (angle<(a-variance)):
+	
+			   	#rospy.loginfo(twist2.linear.z)
+			   	
+				twist2.angular.z=speed_a
+				tt=rospy.get_rostime().to_sec()
+				angle=speed_a*(tt-begin)
+			   	cmd_pub2.publish(twist2)
+			   	print(angle)
+	
+				rate.sleep()
+			   print("turn 1 exit")
+			   twist2.angular.z=0
+			   cmd_pub2.publish(twist2)
+		           a=-3.1416/2
+			   angle=0
+			   speed_a=-speed_a
+			   variance=-a*0.01
+			   begin=rospy.get_rostime().to_sec()
+			   tt=rospy.get_rostime().to_sec()
+			   print("turn 2")
+			   while ((angle)>(a-variance)):
+	
+			   	rospy.loginfo(twist2.linear.z)
+			   	
+				twist2.angular.z=speed_a
+				tt=rospy.get_rostime().to_sec()
+				angle=speed_a*(tt-begin)
+			   	cmd_pub2.publish(twist2)
+			   	
+			
+				rate.sleep()
+			   print("turn 2 exit")
+			   twist2.angular.z=0
+			   cmd_pub2.publish(twist2)
+	print(self.stops)
+
+	t_init=rospy.get_rostime().to_sec()
+	ts=rospy.get_rostime().to_sec()
+	while ((ts-t_init)<5.75):		#---------1. Change this to make fit square
+		
+		twist2.linear.x=0.05
+		cmd_pub2.publish(twist2)		
+		rate.sleep()
+		#print("now",self.col_index)
+		ts=rospy.get_rostime().to_sec()
+
+	print("-----------------------------AUTO end")
+	#twist2.linear.x=0
+   	#twist2.angular.z=0
+  	#self.cmd_pub.publish(twist2)
+	print("this")
+	self.col_index=-1
+	self.P_go=True	
+
+if __name__=="__main__":
+    if os.name != 'nt':
+        settings = termios.tcgetattr(sys.stdin)
+      
+    color_map = [0,1,2,3] ### A sample map with 4 colours in a row
+        
+    rospy.init_node('bayes_loc')
+    
+    stops=[11,9,10,3,6]   #stops desired
+    BL=BayesLoc(color_map,stops)
+
+    rospy.sleep(0.5)
+    ### Initialize your PID controller here ( to merge with the bayes_loc node )
+    #PID = PIDcontrol()
+    PID=PathFinder(BL)
+    print("s")
+    w=True
+    w=0
+
+    try:
+        while(not rospy.is_shutdown() and len(BL.stops)>0):
+		if (PID.running==False and BL.P_go==True):
+			print("xxsw")
+			w=w+1
+			print(w)
+			#PID.P(0.05,0.2,0.003)	
+			PID.P(0.05,0.2,0.003)    # 	increase KP
+			PID.running=False
+ 
+        #while (not rospy.is_shutdown()):
+        #    key = getKey()
+        #    if (key == '\x03'): #1.22:bayesian.curPos >= 1.6 or
+        #        rospy.loginfo('Finished!')
+        #        break
+            
+         #   rospy.loginfo("Measurement: {}".format(BL.measured_rgb))
+            #rospy.loginfo("Line index: {}".format(BL.line_idx))
+                
+#    except Exception as e:
+#        print("comm failed:{}".format(e))
+
+    finally:
+
+            ### Stop the robot when code ends
+        cmd_publisher = rospy.Publisher('cmd_vel', Twist, queue_size=1)
+        twist = Twist()
+        twist.linear.x = 0.0; twist.linear.y = 0.0; twist.linear.z = 0.0
+        twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = 0.0
+        cmd_publisher.publish(twist)
+
+
+
+
+
